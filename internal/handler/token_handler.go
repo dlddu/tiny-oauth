@@ -60,7 +60,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Only accept POST method
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "invalid_request",
 			ErrorDescription: "Method not allowed",
 		})
@@ -71,7 +71,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/x-www-form-urlencoded") {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "invalid_request",
 			ErrorDescription: "Content-Type must be application/x-www-form-urlencoded",
 		})
@@ -81,7 +81,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Parse form data
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "invalid_request",
 			ErrorDescription: "Failed to parse form data",
 		})
@@ -92,7 +92,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	grantType := r.FormValue("grant_type")
 	if grantType == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "invalid_request",
 			ErrorDescription: "grant_type parameter is required",
 		})
@@ -102,7 +102,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Only support client_credentials grant type
 	if grantType != "client_credentials" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "unsupported_grant_type",
 			ErrorDescription: "grant_type must be client_credentials",
 		})
@@ -113,7 +113,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	client, err := h.authenticateClient(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "invalid_client",
 			ErrorDescription: "Client authentication failed",
 		})
@@ -123,7 +123,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if client supports client_credentials grant
 	if !h.supportsGrantType(client, "client_credentials") {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "unauthorized_client",
 			ErrorDescription: "Client is not authorized to use this grant type",
 		})
@@ -141,7 +141,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Validate requested scopes
 		if !h.validateScopes(scopes, client.Scopes) {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(ErrorResponse{
+			_ = json.NewEncoder(w).Encode(ErrorResponse{
 				Error:            "invalid_scope",
 				ErrorDescription: "Requested scope is not allowed for this client",
 			})
@@ -154,7 +154,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	accessToken, expiresIn, err := h.tokenService.GenerateAccessToken(ctx, client.ClientID, scopes)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{
+		_ = json.NewEncoder(w).Encode(ErrorResponse{
 			Error:            "server_error",
 			ErrorDescription: "Failed to generate access token",
 		})
@@ -170,7 +170,7 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // authenticateClient authenticates the client using Basic Auth or POST body
