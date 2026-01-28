@@ -249,14 +249,16 @@ func TestValidateToken(t *testing.T) {
 		t.Fatalf("failed to generate valid token: %v", err)
 	}
 
-	// Generate an expired token
+	// Generate an expired token using very short TTL
 	expiredToken, err := tm.GenerateToken(TokenClaims{
 		Subject: "user-123",
-		TTL:     -1 * time.Hour, // Already expired
+		TTL:     1 * time.Millisecond, // Very short TTL
 	})
 	if err != nil {
 		t.Fatalf("failed to generate expired token: %v", err)
 	}
+	// Wait for token to expire
+	time.Sleep(10 * time.Millisecond)
 
 	// Generate token with wrong key
 	wrongPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
