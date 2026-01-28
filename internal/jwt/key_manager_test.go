@@ -234,7 +234,7 @@ func TestLoadPrivateKeyFromFile(t *testing.T) {
 			}
 
 			if loadedKey == nil {
-				t.Error("loaded key is nil")
+				t.Fatalf("loaded key is nil")
 			}
 
 			// Verify the loaded key matches the original
@@ -316,7 +316,7 @@ func TestLoadPublicKeyFromFile(t *testing.T) {
 			}
 
 			if loadedKey == nil {
-				t.Error("loaded key is nil")
+				t.Fatalf("loaded key is nil")
 			}
 
 			// Verify the loaded key matches the original
