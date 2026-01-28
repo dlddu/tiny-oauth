@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dlddu/tiny-oauth/internal/domain"
 )
@@ -1139,7 +1138,6 @@ func TestAuthHandler_CSRFProtection(t *testing.T) {
 			expectedToken, providedToken := tt.setupCSRF()
 
 			// Store expected token in session
-			sessionStore := NewMockSessionStore()
 			_ = sessionStore.Set("test-session", "csrf_token", expectedToken)
 
 			// Create request with provided token
