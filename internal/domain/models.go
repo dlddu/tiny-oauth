@@ -34,16 +34,16 @@ type User struct {
 
 // AuthorizationCode represents an OAuth 2.0 authorization code
 type AuthorizationCode struct {
-	ID                  string    `json:"id"`
-	CodeHash            string    `json:"-"`
-	ClientID            string    `json:"client_id"`
-	UserID              string    `json:"user_id"`
-	RedirectURI         string    `json:"redirect_uri"`
-	Scopes              []string  `json:"scopes"`
-	CodeChallenge       string    `json:"-"`
-	CodeChallengeMethod string    `json:"-"`
-	ExpiresAt           time.Time `json:"expires_at"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                  string     `json:"id"`
+	CodeHash            string     `json:"-"`
+	ClientID            string     `json:"client_id"`
+	UserID              string     `json:"user_id"`
+	RedirectURI         string     `json:"redirect_uri"`
+	Scopes              []string   `json:"scopes"`
+	CodeChallenge       string     `json:"-"`
+	CodeChallengeMethod string     `json:"-"`
+	ExpiresAt           time.Time  `json:"expires_at"`
+	CreatedAt           time.Time  `json:"created_at"`
 	UsedAt              *time.Time `json:"used_at,omitempty"`
 }
 
