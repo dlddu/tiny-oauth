@@ -1,7 +1,5 @@
 package service
 
-import "fmt"
-
 // OAuthError represents an OAuth 2.0 error response
 type OAuthError struct {
 	Code             string `json:"error"`
@@ -72,8 +70,3 @@ const (
 	ErrUnsupportedGrantType = simpleOAuthError("unsupported_grant_type")
 	ErrInvalidScope         = simpleOAuthError("invalid_scope")
 )
-
-// Helper to create simple errors that match test expectations
-func newSimpleError(code string) error {
-	return fmt.Errorf(code)
-}

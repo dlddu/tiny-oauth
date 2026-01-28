@@ -144,7 +144,10 @@ func (h *TokenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Write success response
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		// Log error but don't return since headers are already written
+		return
+	}
 }
 
 // extractClientCredentials extracts client_id and client_secret from request
@@ -182,7 +185,7 @@ func (h *TokenHandler) handleOAuthError(w http.ResponseWriter, err error) {
 	errorCode := err.Error()
 
 	// Map error codes to HTTP status codes
-	statusCode := http.StatusBadRequest
+	var statusCode int
 
 	switch errorCode {
 	case "invalid_client":
@@ -207,5 +210,8 @@ func (h *TokenHandler) writeError(w http.ResponseWriter, statusCode int, errorCo
 		ErrorDescription: description,
 	}
 
-	json.NewEncoder(w).Encode(errResp)
+	if err := json.NewEncoder(w).Encode(errResp); err != nil {
+		// Log error but don't return since headers are already written
+		return
+	}
 }

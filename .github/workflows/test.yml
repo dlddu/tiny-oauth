@@ -111,8 +111,3 @@ jobs:
 
       - name: Build
         run: go build -v ./...
-
-      - name: Build server binary
-        run: |
-          mkdir -p bin
-          go build -o bin/server -v ./cmd/server
