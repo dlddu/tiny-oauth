@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 // MockClientRepository is a mock implementation for testing
 type MockClientRepository struct {
+	mu      sync.RWMutex
 	clients map[string]*domain.Client
 	err     error
 }
@@ -22,10 +24,14 @@ func NewMockClientRepository() *MockClientRepository {
 }
 
 func (m *MockClientRepository) SetError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.err = err
 }
 
 func (m *MockClientRepository) Create(ctx context.Context, client *domain.Client) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.err != nil {
 		return m.err
 	}
@@ -34,6 +40,8 @@ func (m *MockClientRepository) Create(ctx context.Context, client *domain.Client
 }
 
 func (m *MockClientRepository) GetByClientID(ctx context.Context, clientID string) (*domain.Client, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -45,6 +53,8 @@ func (m *MockClientRepository) GetByClientID(ctx context.Context, clientID strin
 }
 
 func (m *MockClientRepository) Delete(ctx context.Context, clientID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.err != nil {
 		return m.err
 	}
