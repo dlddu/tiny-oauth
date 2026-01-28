@@ -21,9 +21,9 @@ func TestHashPassword(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "should hash very long password",
+			name:     "should fail with very long password (>72 bytes)",
 			password: "this_is_a_very_long_password_with_more_than_72_characters_to_test_bcrypt_limit_and_behavior",
-			wantErr:  false,
+			wantErr:  true,
 		},
 		{
 			name:     "should fail with empty password",

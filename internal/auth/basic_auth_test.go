@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -159,14 +160,8 @@ func TestParseBasicAuthWithURLEncoding(t *testing.T) {
 
 func TestParseBasicAuthEdgeCases(t *testing.T) {
 	t.Run("should handle very long credentials", func(t *testing.T) {
-		longClientID := string(make([]byte, 1000))
-		for i := range longClientID {
-			longClientID = "a"
-		}
-		longSecret := string(make([]byte, 1000))
-		for i := range longSecret {
-			longSecret = "b"
-		}
+		longClientID := strings.Repeat("a", 1000)
+		longSecret := strings.Repeat("b", 1000)
 
 		credentials := fmt.Sprintf("%s:%s", longClientID, longSecret)
 		authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials))
