@@ -53,8 +53,7 @@ func (m *MockUserService) ValidateUsername(username string) error {
 
 // MockAuthCodeService is a mock for authorization code operations
 type MockAuthCodeService struct {
-	code *domain.AuthorizationCode
-	err  error
+	err error
 }
 
 func (m *MockAuthCodeService) GenerateAuthorizationCode(ctx context.Context, clientID, userID, redirectURI string, scopes []string) (string, error) {
@@ -423,6 +422,10 @@ func TestAuthHandler_HandleLoginSubmit(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(tt.formData.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.AddCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: "test-session",
+			})
 			rr := httptest.NewRecorder()
 
 			// Execute request
