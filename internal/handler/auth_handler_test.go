@@ -2082,3 +2082,506 @@ func TestAuthHandler_ConsentFormScopeDescriptions(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthHandler_OAuthAuthorize(t *testing.T) {
+	tests := []struct {
+		name             string
+		sessionData      map[string]interface{}
+		queryParams      url.Values
+		setupMocks       func(*MockClientService)
+		wantStatus       int
+		wantRedirect     bool
+		wantRedirectPath string
+		wantQueryParams  map[string]string
+		wantContains     []string
+		wantError        bool
+	}{
+		{
+			name: "should redirect to login when user is not authenticated",
+			sessionData: map[string]interface{}{
+				// No user_id - unauthenticated
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+				"scope":         {"read write"},
+				"state":         {"random-state-123"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					ClientName:   "Test App",
+					RedirectURIs: []string{"https://example.com/callback"},
+					Scopes:       []string{"read", "write"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/login",
+			wantQueryParams: map[string]string{
+				"client_id":     "test-client",
+				"redirect_uri":  "https://example.com/callback",
+				"response_type": "code",
+				"scope":         "read write",
+				"state":         "random-state-123",
+			},
+		},
+		{
+			name: "should preserve OAuth parameters when redirecting to login",
+			sessionData: map[string]interface{}{
+				// No user_id
+			},
+			queryParams: url.Values{
+				"client_id":             {"test-client"},
+				"redirect_uri":          {"https://example.com/callback"},
+				"response_type":         {"code"},
+				"scope":                 {"read"},
+				"state":                 {"state-value"},
+				"code_challenge":        {"challenge-value"},
+				"code_challenge_method": {"S256"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+					Scopes:       []string{"read"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/login",
+			wantQueryParams: map[string]string{
+				"code_challenge":        "challenge-value",
+				"code_challenge_method": "S256",
+			},
+		},
+		{
+			name: "should redirect to consent when user is authenticated",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+				"scope":         {"read"},
+				"state":         {"state-123"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					ClientName:   "Test App",
+					RedirectURIs: []string{"https://example.com/callback"},
+					Scopes:       []string{"read"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+			wantQueryParams: map[string]string{
+				"client_id":     "test-client",
+				"redirect_uri":  "https://example.com/callback",
+				"response_type": "code",
+				"scope":         "read",
+				"state":         "state-123",
+			},
+		},
+		{
+			name: "should preserve state parameter through authorization flow",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+				"state":         {"unique-state-value-456"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+			wantQueryParams: map[string]string{
+				"state": "unique-state-value-456",
+			},
+		},
+		{
+			name: "should fail with missing client_id",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+			},
+			setupMocks: func(cs *MockClientService) {},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+			wantContains: []string{
+				"client_id is required",
+			},
+		},
+		{
+			name: "should fail with missing redirect_uri",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"response_type": {"code"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+			wantContains: []string{
+				"redirect_uri is required",
+			},
+		},
+		{
+			name: "should fail with missing response_type",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":    {"test-client"},
+				"redirect_uri": {"https://example.com/callback"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+			wantContains: []string{
+				"response_type is required",
+			},
+		},
+		{
+			name: "should fail with unsupported response_type",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"token"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+			wantContains: []string{
+				"unsupported response_type",
+			},
+		},
+		{
+			name: "should fail with invalid client_id",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"invalid-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.err = errors.New("client not found")
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+			wantContains: []string{
+				"Invalid client",
+			},
+		},
+		{
+			name: "should fail with invalid redirect_uri",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://evil.com/callback"},
+				"response_type": {"code"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+			wantContains: []string{
+				"Invalid redirect_uri",
+			},
+		},
+		{
+			name: "should support PKCE code_challenge parameter",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":             {"test-client"},
+				"redirect_uri":          {"https://example.com/callback"},
+				"response_type":         {"code"},
+				"code_challenge":        {"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"},
+				"code_challenge_method": {"S256"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+			wantQueryParams: map[string]string{
+				"code_challenge":        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+				"code_challenge_method": "S256",
+			},
+		},
+		{
+			name: "should support PKCE with plain method",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":             {"test-client"},
+				"redirect_uri":          {"https://example.com/callback"},
+				"response_type":         {"code"},
+				"code_challenge":        {"plain-challenge-value"},
+				"code_challenge_method": {"plain"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+			wantQueryParams: map[string]string{
+				"code_challenge":        "plain-challenge-value",
+				"code_challenge_method": "plain",
+			},
+		},
+		{
+			name: "should work without PKCE parameters for confidential clients",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:       "test-client",
+					RedirectURIs:   []string{"https://example.com/callback"},
+					IsConfidential: true,
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+		},
+		{
+			name: "should accept valid scope parameter",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://example.com/callback"},
+				"response_type": {"code"},
+				"scope":         {"read write profile"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					RedirectURIs: []string{"https://example.com/callback"},
+					Scopes:       []string{"read", "write", "profile"},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+			wantQueryParams: map[string]string{
+				"scope": "read write profile",
+			},
+		},
+		{
+			name: "should accept multiple redirect_uris and match exact",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":     {"test-client"},
+				"redirect_uri":  {"https://app.example.com/oauth/callback"},
+				"response_type": {"code"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID: "test-client",
+					RedirectURIs: []string{
+						"https://example.com/callback",
+						"https://app.example.com/oauth/callback",
+						"https://dev.example.com/callback",
+					},
+				}
+			},
+			wantStatus:       http.StatusFound,
+			wantRedirect:     true,
+			wantRedirectPath: "/consent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mocks
+			clientService := &MockClientService{}
+			sessionStore := NewMockSessionStore()
+			if tt.setupMocks != nil {
+				tt.setupMocks(clientService)
+			}
+
+			// Set session data
+			for key, value := range tt.sessionData {
+				_ = sessionStore.Set("test-session", key, value)
+			}
+
+			// Create handler
+			userService := &MockUserService{}
+			authCodeService := &MockAuthCodeService{}
+			handler := NewAuthHandler(userService, clientService, authCodeService, sessionStore)
+
+			// Build URL with query parameters
+			reqURL := "/oauth/authorize"
+			if len(tt.queryParams) > 0 {
+				reqURL += "?" + tt.queryParams.Encode()
+			}
+
+			// Create request with session cookie
+			req := httptest.NewRequest(http.MethodGet, reqURL, nil)
+			req.AddCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: "test-session",
+			})
+			rr := httptest.NewRecorder()
+
+			// Execute request
+			handler.ServeHTTP(rr, req)
+
+			// Check status code
+			if rr.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			}
+
+			// Check redirect
+			if tt.wantRedirect {
+				location := rr.Header().Get("Location")
+				if location == "" {
+					t.Error("expected Location header for redirect")
+				}
+				if tt.wantRedirectPath != "" && !strings.Contains(location, tt.wantRedirectPath) {
+					t.Errorf("expected redirect to contain %q, got %q", tt.wantRedirectPath, location)
+				}
+
+				// Check query parameters in redirect URL
+				if len(tt.wantQueryParams) > 0 {
+					redirectURL, err := url.Parse(location)
+					if err != nil {
+						t.Fatalf("failed to parse redirect URL: %v", err)
+					}
+					queryParams := redirectURL.Query()
+					for key, expectedValue := range tt.wantQueryParams {
+						actualValue := queryParams.Get(key)
+						if actualValue != expectedValue {
+							t.Errorf("expected query param %s=%q, got %q", key, expectedValue, actualValue)
+						}
+					}
+				}
+			}
+
+			// Check error response
+			if tt.wantError {
+				body := rr.Body.String()
+				for _, expectedStr := range tt.wantContains {
+					if !strings.Contains(body, expectedStr) {
+						t.Errorf("response body should contain %q", expectedStr)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAuthHandler_OAuthAuthorizeMethodValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		wantStatus int
+	}{
+		{
+			name:       "should accept GET method",
+			method:     http.MethodGet,
+			wantStatus: http.StatusBadRequest, // Will fail validation, but method is accepted
+		},
+		{
+			name:       "should reject POST method",
+			method:     http.MethodPost,
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "should reject PUT method",
+			method:     http.MethodPut,
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "should reject DELETE method",
+			method:     http.MethodDelete,
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create handler
+			userService := &MockUserService{}
+			clientService := &MockClientService{}
+			authCodeService := &MockAuthCodeService{}
+			sessionStore := NewMockSessionStore()
+			handler := NewAuthHandler(userService, clientService, authCodeService, sessionStore)
+
+			req := httptest.NewRequest(tt.method, "/oauth/authorize", nil)
+			rr := httptest.NewRecorder()
+
+			// Execute request
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			}
+		})
+	}
+}

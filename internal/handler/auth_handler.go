@@ -85,6 +85,13 @@ func (h *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/oauth/authorize":
+		switch r.Method {
+		case http.MethodGet:
+			h.HandleOAuthAuthorize(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
 	default:
 		http.NotFound(w, r)
 	}
@@ -280,6 +287,99 @@ func (h *AuthHandler) ShowConsentForm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = h.consentTemplate.Execute(w, data)
+}
+
+// HandleOAuthAuthorize handles the OAuth 2.0 authorization endpoint
+func (h *AuthHandler) HandleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
+	// Extract query parameters
+	clientID := r.URL.Query().Get("client_id")
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	responseType := r.URL.Query().Get("response_type")
+	scope := r.URL.Query().Get("scope")
+	state := r.URL.Query().Get("state")
+	codeChallenge := r.URL.Query().Get("code_challenge")
+	codeChallengeMethod := r.URL.Query().Get("code_challenge_method")
+
+	// Validate required parameters
+	if clientID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "client_id is required")
+		return
+	}
+
+	if redirectURI == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "redirect_uri is required")
+		return
+	}
+
+	if responseType == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "response_type is required")
+		return
+	}
+
+	// Validate response_type
+	if responseType != "code" {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "unsupported response_type")
+		return
+	}
+
+	// Get client information
+	ctx := r.Context()
+	client, err := h.clientService.GetClientByID(ctx, clientID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "Invalid client")
+		return
+	}
+
+	// Validate redirect URI
+	if !h.isValidRedirectURI(redirectURI, client.RedirectURIs) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "Invalid redirect_uri")
+		return
+	}
+
+	// Check if user is authenticated
+	sessionID := h.getSessionID(r)
+	var userIDVal interface{}
+	if sessionID != "" {
+		userIDVal, _ = h.sessionStore.Get(sessionID, "user_id")
+	}
+
+	// Build OAuth parameters for redirect
+	params := "client_id=" + clientID
+	if redirectURI != "" {
+		params += "&redirect_uri=" + redirectURI
+	}
+	if responseType != "" {
+		params += "&response_type=" + responseType
+	}
+	if scope != "" {
+		params += "&scope=" + scope
+	}
+	if state != "" {
+		params += "&state=" + state
+	}
+	if codeChallenge != "" {
+		params += "&code_challenge=" + codeChallenge
+	}
+	if codeChallengeMethod != "" {
+		params += "&code_challenge_method=" + codeChallengeMethod
+	}
+
+	// If user is not authenticated, redirect to login
+	if userIDVal == nil {
+		loginURL := "/login?" + params
+		http.Redirect(w, r, loginURL, http.StatusFound)
+		return
+	}
+
+	// User is authenticated, redirect to consent
+	consentURL := "/consent?" + params
+	http.Redirect(w, r, consentURL, http.StatusFound)
 }
 
 // HandleConsentSubmit processes consent form submission
