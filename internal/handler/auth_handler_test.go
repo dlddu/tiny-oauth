@@ -63,26 +63,6 @@ func (m *MockAuthCodeService) GenerateAuthorizationCode(ctx context.Context, cli
 	return "test-auth-code-123", nil
 }
 
-// MockClientService is a mock for client operations
-type MockClientService struct {
-	client *domain.Client
-	err    error
-}
-
-func (m *MockClientService) AuthenticateClient(ctx context.Context, clientID, clientSecret string) (*domain.Client, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.client, nil
-}
-
-func (m *MockClientService) GetClientByID(ctx context.Context, clientID string) (*domain.Client, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.client, nil
-}
-
 // MockSessionStore is a mock for session storage operations
 type MockSessionStore struct {
 	sessions map[string]map[string]interface{}
