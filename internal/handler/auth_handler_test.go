@@ -63,6 +63,26 @@ func (m *MockAuthCodeService) GenerateAuthorizationCode(ctx context.Context, cli
 	return "test-auth-code-123", nil
 }
 
+// MockClientService is a mock for client operations
+type MockClientService struct {
+	client *domain.Client
+	err    error
+}
+
+func (m *MockClientService) AuthenticateClient(ctx context.Context, clientID, clientSecret string) (*domain.Client, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.client, nil
+}
+
+func (m *MockClientService) GetClientByID(ctx context.Context, clientID string) (*domain.Client, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.client, nil
+}
+
 // MockSessionStore is a mock for session storage operations
 type MockSessionStore struct {
 	sessions map[string]map[string]interface{}
@@ -1322,6 +1342,762 @@ func TestAuthHandler_SecurityHeaders(t *testing.T) {
 				if rr.Header().Get(headerName) != "" {
 					t.Errorf("header %s should not be present", headerName)
 				}
+			}
+		})
+	}
+}
+
+func TestAuthHandler_LoginFormRendering(t *testing.T) {
+	tests := []struct {
+		name           string
+		queryParams    url.Values
+		wantStatus     int
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name:        "should render login form with proper HTML structure",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				"<!DOCTYPE html>",
+				"<html>",
+				"</html>",
+				"<head>",
+				"</head>",
+				"<body>",
+				"</body>",
+			},
+		},
+		{
+			name:        "should include meta viewport for responsive design",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<meta name="viewport"`,
+				`content="width=device-width, initial-scale=1.0"`,
+			},
+		},
+		{
+			name:        "should include UTF-8 charset meta tag",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<meta charset="UTF-8">`,
+			},
+		},
+		{
+			name:        "should include title in login page",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				"<title>Login</title>",
+			},
+		},
+		{
+			name:        "should include username label with for attribute",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<label for="username">`,
+				"Username",
+			},
+		},
+		{
+			name:        "should include password label with for attribute",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<label for="password">`,
+				"Password",
+			},
+		},
+		{
+			name:        "should include username input with proper attributes",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<input type="text"`,
+				`id="username"`,
+				`name="username"`,
+				`required`,
+			},
+		},
+		{
+			name:        "should include password input with proper type",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<input type="password"`,
+				`id="password"`,
+				`name="password"`,
+				`required`,
+			},
+		},
+		{
+			name:        "should include submit button",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<button type="submit">`,
+				"Login",
+				"</button>",
+			},
+		},
+		{
+			name:        "should include form with POST method",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<form method="POST"`,
+				`action="/login"`,
+			},
+		},
+		{
+			name:        "should include style tag for basic styling",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				"<style>",
+				"</style>",
+			},
+		},
+		{
+			name:        "should include CSS for responsive layout",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				"font-family",
+				"padding",
+				"margin",
+			},
+		},
+		{
+			name:        "should include hidden CSRF token field",
+			queryParams: url.Values{},
+			wantStatus:  http.StatusOK,
+			wantContains: []string{
+				`<input type="hidden"`,
+				`name="csrf_token"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create handler
+			userService := &MockUserService{}
+			clientService := &MockClientService{}
+			authCodeService := &MockAuthCodeService{}
+			sessionStore := NewMockSessionStore()
+			handler := NewAuthHandler(userService, clientService, authCodeService, sessionStore)
+
+			// Build URL with query parameters
+			reqURL := "/login"
+			if len(tt.queryParams) > 0 {
+				reqURL += "?" + tt.queryParams.Encode()
+			}
+
+			// Create request
+			req := httptest.NewRequest(http.MethodGet, reqURL, nil)
+			rr := httptest.NewRecorder()
+
+			// Execute request
+			handler.ServeHTTP(rr, req)
+
+			// Check status code
+			if rr.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			}
+
+			// Check response body contains expected strings
+			body := rr.Body.String()
+			for _, expectedStr := range tt.wantContains {
+				if !strings.Contains(body, expectedStr) {
+					t.Errorf("response body should contain %q", expectedStr)
+				}
+			}
+
+			// Check response body does not contain unexpected strings
+			for _, unexpectedStr := range tt.wantNotContain {
+				if strings.Contains(body, unexpectedStr) {
+					t.Errorf("response body should not contain %q", unexpectedStr)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthHandler_LoginFormErrorDisplay(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupMocks   func(*MockUserService)
+		formData     url.Values
+		wantStatus   int
+		wantContains []string
+	}{
+		{
+			name: "should display error message on login failure",
+			setupMocks: func(us *MockUserService) {
+				us.err = errors.New("invalid credentials")
+			},
+			formData: url.Values{
+				"username": {"wronguser"},
+				"password": {"wrongpass"},
+			},
+			wantStatus: http.StatusUnauthorized,
+			wantContains: []string{
+				"Invalid username or password",
+			},
+		},
+		{
+			name: "should display account inactive message",
+			setupMocks: func(us *MockUserService) {
+				us.err = errors.New("user is inactive")
+			},
+			formData: url.Values{
+				"username": {"inactiveuser"},
+				"password": {"password123"},
+			},
+			wantStatus: http.StatusForbidden,
+			wantContains: []string{
+				"Account is inactive",
+			},
+		},
+		{
+			name:       "should display username required message",
+			setupMocks: func(us *MockUserService) {},
+			formData: url.Values{
+				"username": {""},
+				"password": {"password123"},
+			},
+			wantStatus: http.StatusBadRequest,
+			wantContains: []string{
+				"username is required",
+			},
+		},
+		{
+			name:       "should display password required message",
+			setupMocks: func(us *MockUserService) {},
+			formData: url.Values{
+				"username": {"testuser"},
+				"password": {""},
+			},
+			wantStatus: http.StatusBadRequest,
+			wantContains: []string{
+				"password is required",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mocks
+			userService := &MockUserService{}
+			if tt.setupMocks != nil {
+				tt.setupMocks(userService)
+			}
+
+			clientService := &MockClientService{}
+			authCodeService := &MockAuthCodeService{}
+			sessionStore := NewMockSessionStore()
+			handler := NewAuthHandler(userService, clientService, authCodeService, sessionStore)
+
+			// Create request
+			req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(tt.formData.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.AddCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: "test-session",
+			})
+			rr := httptest.NewRecorder()
+
+			// Execute request
+			handler.ServeHTTP(rr, req)
+
+			// Check status code
+			if rr.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			}
+
+			// Check error message
+			body := rr.Body.String()
+			for _, expectedStr := range tt.wantContains {
+				if !strings.Contains(body, expectedStr) {
+					t.Errorf("response body should contain error message %q", expectedStr)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthHandler_ConsentFormRendering(t *testing.T) {
+	tests := []struct {
+		name           string
+		sessionData    map[string]interface{}
+		queryParams    url.Values
+		setupMocks     func(*MockClientService)
+		wantStatus     int
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name: "should render consent form with proper HTML structure",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+				"scope":     {"read write"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test Application",
+					Scopes:     []string{"read", "write"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				"<!DOCTYPE html>",
+				"<html>",
+				"</html>",
+				"<head>",
+				"</head>",
+				"<body>",
+				"</body>",
+			},
+		},
+		{
+			name: "should include meta viewport for responsive design",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test Application",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				`<meta name="viewport"`,
+				`content="width=device-width, initial-scale=1.0"`,
+			},
+		},
+		{
+			name: "should display client name prominently",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "My Awesome App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				"<strong>My Awesome App</strong>",
+			},
+		},
+		{
+			name: "should display authorization message",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				"Authorization Required",
+				"is requesting access to your account",
+			},
+		},
+		{
+			name: "should display requested scopes in a list",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+				"scope":     {"read write profile"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+					Scopes:     []string{"read", "write", "profile"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				"<ul>",
+				"</ul>",
+				"<li",
+				"read",
+				"write",
+				"profile",
+				"Requested permissions",
+			},
+		},
+		{
+			name: "should include Allow button with proper styling class",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				`<button type="submit"`,
+				`name="action"`,
+				`value="allow"`,
+				`class="allow"`,
+				"Allow",
+			},
+		},
+		{
+			name: "should include Deny button with proper styling class",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				`<button type="submit"`,
+				`name="action"`,
+				`value="deny"`,
+				`class="deny"`,
+				"Deny",
+			},
+		},
+		{
+			name: "should include form with POST method to consent endpoint",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				`<form method="POST"`,
+				`action="/consent"`,
+			},
+		},
+		{
+			name: "should include hidden fields for OAuth parameters",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id":    {"test-client"},
+				"redirect_uri": {"https://example.com/callback"},
+				"scope":        {"read"},
+				"state":        {"abc123"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:     "test-client",
+					ClientName:   "Test App",
+					RedirectURIs: []string{"https://example.com/callback"},
+					Scopes:       []string{"read"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				`<input type="hidden"`,
+				`name="client_id"`,
+				`value="test-client"`,
+				`name="redirect_uri"`,
+				`value="https://example.com/callback"`,
+				`name="scope"`,
+				`value="read"`,
+				`name="state"`,
+				`value="abc123"`,
+			},
+		},
+		{
+			name: "should include CSS for button layout",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				"<style>",
+				"</style>",
+				".buttons",
+				".allow",
+				".deny",
+			},
+		},
+		{
+			name: "should include CSS for scopes display area",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+				"scope":     {"read"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+					Scopes:     []string{"read"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantContains: []string{
+				".scopes",
+				".scope-item",
+			},
+		},
+		{
+			name: "should not display scope section when no scopes requested",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+				}
+			},
+			wantStatus: http.StatusOK,
+			wantNotContain: []string{
+				"Requested permissions",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mocks
+			clientService := &MockClientService{}
+			sessionStore := NewMockSessionStore()
+			if tt.setupMocks != nil {
+				tt.setupMocks(clientService)
+			}
+
+			// Set session data
+			for key, value := range tt.sessionData {
+				_ = sessionStore.Set("test-session", key, value)
+			}
+
+			// Create handler
+			userService := &MockUserService{}
+			authCodeService := &MockAuthCodeService{}
+			handler := NewAuthHandler(userService, clientService, authCodeService, sessionStore)
+
+			// Build URL with query parameters
+			reqURL := "/consent"
+			if len(tt.queryParams) > 0 {
+				reqURL += "?" + tt.queryParams.Encode()
+			}
+
+			// Create request with session cookie
+			req := httptest.NewRequest(http.MethodGet, reqURL, nil)
+			req.AddCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: "test-session",
+			})
+			rr := httptest.NewRecorder()
+
+			// Execute request
+			handler.ServeHTTP(rr, req)
+
+			// Check status code
+			if rr.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			}
+
+			// Check response body contains expected strings
+			body := rr.Body.String()
+			for _, expectedStr := range tt.wantContains {
+				if !strings.Contains(body, expectedStr) {
+					t.Errorf("response body should contain %q", expectedStr)
+				}
+			}
+
+			// Check response body does not contain unexpected strings
+			for _, unexpectedStr := range tt.wantNotContain {
+				if strings.Contains(body, unexpectedStr) {
+					t.Errorf("response body should not contain %q", unexpectedStr)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthHandler_ConsentFormScopeDescriptions(t *testing.T) {
+	tests := []struct {
+		name        string
+		sessionData map[string]interface{}
+		queryParams url.Values
+		setupMocks  func(*MockClientService)
+		wantStatus  int
+		scopes      []string
+	}{
+		{
+			name: "should display all requested scopes individually",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+				"scope":     {"read write admin"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+					Scopes:     []string{"read", "write", "admin"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			scopes:     []string{"read", "write", "admin"},
+		},
+		{
+			name: "should display single scope",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+				"scope":     {"profile"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+					Scopes:     []string{"profile"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			scopes:     []string{"profile"},
+		},
+		{
+			name: "should display multiple scopes with proper separation",
+			sessionData: map[string]interface{}{
+				"user_id": "user-123",
+			},
+			queryParams: url.Values{
+				"client_id": {"test-client"},
+				"scope":     {"email profile openid"},
+			},
+			setupMocks: func(cs *MockClientService) {
+				cs.client = &domain.Client{
+					ClientID:   "test-client",
+					ClientName: "Test App",
+					Scopes:     []string{"email", "profile", "openid"},
+				}
+			},
+			wantStatus: http.StatusOK,
+			scopes:     []string{"email", "profile", "openid"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mocks
+			clientService := &MockClientService{}
+			sessionStore := NewMockSessionStore()
+			if tt.setupMocks != nil {
+				tt.setupMocks(clientService)
+			}
+
+			// Set session data
+			for key, value := range tt.sessionData {
+				_ = sessionStore.Set("test-session", key, value)
+			}
+
+			// Create handler
+			userService := &MockUserService{}
+			authCodeService := &MockAuthCodeService{}
+			handler := NewAuthHandler(userService, clientService, authCodeService, sessionStore)
+
+			// Build URL with query parameters
+			reqURL := "/consent"
+			if len(tt.queryParams) > 0 {
+				reqURL += "?" + tt.queryParams.Encode()
+			}
+
+			// Create request with session cookie
+			req := httptest.NewRequest(http.MethodGet, reqURL, nil)
+			req.AddCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: "test-session",
+			})
+			rr := httptest.NewRecorder()
+
+			// Execute request
+			handler.ServeHTTP(rr, req)
+
+			// Check status code
+			if rr.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, rr.Code)
+			}
+
+			// Check each scope is displayed
+			body := rr.Body.String()
+			for _, scope := range tt.scopes {
+				if !strings.Contains(body, scope) {
+					t.Errorf("response body should contain scope %q", scope)
+				}
+			}
+
+			// Verify scopes are in list items
+			scopeItemCount := strings.Count(body, `<li class="scope-item">`)
+			if len(tt.scopes) > 0 && scopeItemCount != len(tt.scopes) {
+				t.Errorf("expected %d scope items, found %d", len(tt.scopes), scopeItemCount)
 			}
 		})
 	}

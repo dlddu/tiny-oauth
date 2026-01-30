@@ -111,6 +111,7 @@ func (h *AuthHandler) ShowLoginForm(w http.ResponseWriter, r *http.Request) {
 		"ResponseType": r.URL.Query().Get("response_type"),
 		"CodeChallenge": r.URL.Query().Get("code_challenge"),
 		"CodeChallengeMethod": r.URL.Query().Get("code_challenge_method"),
+		"Error":       r.URL.Query().Get("error"),
 	}
 
 	// Render template
@@ -476,34 +477,75 @@ const loginTemplateHTML = `<!DOCTYPE html>
 			max-width: 400px;
 			margin: 50px auto;
 			padding: 20px;
+			background-color: #f5f5f5;
+		}
+		h1 {
+			text-align: center;
+			color: #333;
+		}
+		.error-message {
+			background-color: #f8d7da;
+			color: #721c24;
+			padding: 12px;
+			margin-bottom: 20px;
+			border: 1px solid #f5c6cb;
+			border-radius: 5px;
+			text-align: center;
 		}
 		form {
+			background-color: white;
 			border: 1px solid #ccc;
-			padding: 20px;
-			border-radius: 5px;
+			padding: 30px;
+			border-radius: 8px;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 		}
-		input {
+		label {
+			display: block;
+			margin-bottom: 5px;
+			color: #555;
+			font-weight: 500;
+		}
+		input[type="text"],
+		input[type="password"] {
 			width: 100%;
-			padding: 10px;
-			margin: 10px 0;
+			padding: 12px;
+			margin-bottom: 20px;
 			box-sizing: border-box;
+			border: 1px solid #ddd;
+			border-radius: 4px;
+			font-size: 14px;
+		}
+		input[type="text"]:focus,
+		input[type="password"]:focus {
+			outline: none;
+			border-color: #007bff;
+			box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
 		}
 		button {
 			width: 100%;
-			padding: 10px;
+			padding: 12px;
 			background-color: #007bff;
 			color: white;
 			border: none;
 			border-radius: 5px;
 			cursor: pointer;
+			font-size: 16px;
+			font-weight: 600;
+			transition: background-color 0.2s;
 		}
 		button:hover {
 			background-color: #0056b3;
+		}
+		button:active {
+			background-color: #004494;
 		}
 	</style>
 </head>
 <body>
 	<h1>Login</h1>
+	{{if .Error}}
+	<div class="error-message">{{.Error}}</div>
+	{{end}}
 	<form method="POST" action="/login">
 		<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 		<input type="hidden" name="client_id" value="{{.ClientID}}">
@@ -537,32 +579,56 @@ const consentTemplateHTML = `<!DOCTYPE html>
 			max-width: 500px;
 			margin: 50px auto;
 			padding: 20px;
+			background-color: #f5f5f5;
+		}
+		h1 {
+			color: #333;
+			margin-top: 0;
 		}
 		.consent-box {
+			background-color: white;
 			border: 1px solid #ccc;
-			padding: 20px;
-			border-radius: 5px;
+			padding: 30px;
+			border-radius: 8px;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+		}
+		.consent-box p {
+			color: #555;
+			line-height: 1.6;
 		}
 		.scopes {
 			margin: 20px 0;
-			padding: 10px;
-			background-color: #f5f5f5;
+			padding: 15px;
+			background-color: #f8f9fa;
 			border-radius: 5px;
+			border: 1px solid #e9ecef;
+		}
+		.scopes p {
+			margin-top: 0;
+			margin-bottom: 10px;
+		}
+		.scopes ul {
+			margin: 0;
+			padding-left: 20px;
 		}
 		.scope-item {
-			margin: 5px 0;
+			margin: 8px 0;
+			color: #495057;
 		}
 		.buttons {
 			display: flex;
-			gap: 10px;
-			margin-top: 20px;
+			gap: 15px;
+			margin-top: 25px;
 		}
 		button {
 			flex: 1;
-			padding: 10px;
+			padding: 12px 20px;
 			border: none;
 			border-radius: 5px;
 			cursor: pointer;
+			font-size: 16px;
+			font-weight: 600;
+			transition: background-color 0.2s;
 		}
 		.allow {
 			background-color: #28a745;
@@ -571,12 +637,18 @@ const consentTemplateHTML = `<!DOCTYPE html>
 		.allow:hover {
 			background-color: #218838;
 		}
+		.allow:active {
+			background-color: #1e7e34;
+		}
 		.deny {
 			background-color: #dc3545;
 			color: white;
 		}
 		.deny:hover {
 			background-color: #c82333;
+		}
+		.deny:active {
+			background-color: #bd2130;
 		}
 	</style>
 </head>
